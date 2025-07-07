@@ -32,12 +32,14 @@ endif()
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 # Find packages.
+find_package(spdlog CONFIG REQUIRED)
+
 find_package(OpenSSL 3.0.0 REQUIRED COMPONENTS Crypto)
+
 find_package(fmt 8.1.1 CONFIG)
 if(NOT fmt_FOUND)
 	find_package(fmt 8.1.1 REQUIRED)
 endif()
-find_package(spdlog CONFIG REQUIRED)
 
 # Look for vcpkg-provided libmariadb first
 # If we link to the file directly, we might miss its dependencies from vcpkg

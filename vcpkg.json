@@ -10,7 +10,8 @@
      "boost-variant",
      "fmt",
 	 "openssl",
-     "pugixml"
+     "pugixml",
+	 "spdlog"
    ],
 
    "features": {

@@ -170,7 +170,6 @@
     <ClCompile Include="..\src\combat.cpp" />
     <ClCompile Include="..\src\condition.cpp" />
     <ClCompile Include="..\src\configmanager.cpp" />
-    <ClCompile Include="..\src\logger.cpp" />	
     <ClCompile Include="..\src\connection.cpp" />
     <ClCompile Include="..\src\container.cpp" />
     <ClCompile Include="..\src\creature.cpp" />
@@ -196,6 +195,7 @@
     <ClCompile Include="..\src\iomarket.cpp" />
     <ClCompile Include="..\src\item.cpp" />
     <ClCompile Include="..\src\items.cpp" />
+	<ClCompile Include="..\src\logger.cpp" />
     <ClCompile Include="..\src\luascript.cpp" />
     <ClCompile Include="..\src\mailbox.cpp" />
 	<ClCompile Include="..\src\main.cpp" />
@@ -256,7 +256,6 @@
     <ClInclude Include="..\src\combat.h" />
     <ClInclude Include="..\src\condition.h" />
     <ClInclude Include="..\src\configmanager.h" />
-    <ClInclude Include="..\src\logger.h" />
     <ClInclude Include="..\src\connection.h" />
     <ClInclude Include="..\src\const.h" />
     <ClInclude Include="..\src\container.h" />
@@ -287,6 +286,7 @@
     <ClInclude Include="..\src\itemloader.h" />
     <ClInclude Include="..\src\items.h" />
     <ClInclude Include="..\src\lockfree.h" />
+	<ClInclude Include="..\src\logger.h" />
     <ClInclude Include="..\src\luascript.h" />
     <ClInclude Include="..\src\mailbox.h" />
     <ClInclude Include="..\src\map.h" />

@@ -18,6 +18,7 @@
 #include "inbox.h"
 #include "iologindata.h"
 #include "iomapserialize.h"
+#include "logger.h"
 #include "luavariant.h"
 #include "matrixarea.h"
 #include "monster.h"
@@ -3454,20 +3455,17 @@ int LuaScriptInterface::luaDebugPrint(lua_State* L) {
 	return 0;
 }
 
-int LuaScriptInterface::luaLogInfo(lua_State* L)
-{
+int LuaScriptInterface::luaLogInfo(lua_State* L) {
 	g_logger().info(lua::getString(L, 1));
 	return 0;
 }
 
-int LuaScriptInterface::luaLogWarning(lua_State* L)
-{
+int LuaScriptInterface::luaLogWarning(lua_State* L) {
 	g_logger().warn(lua::getString(L, 1));
 	return 0;
 }
 
-int LuaScriptInterface::luaLogError(lua_State* L)
-{
+int LuaScriptInterface::luaLogError(lua_State* L) {
 	g_logger().error(lua::getString(L, 1));
 	return 0;
 }

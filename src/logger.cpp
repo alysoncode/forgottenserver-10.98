@@ -2,6 +2,9 @@
 // Use of this source code is governed by the GPL-2.0 License that can be found in the LICENSE file.
 
 #include "otpch.h"
+
+#include "logger.h"
+
 #include <csignal>
 #include <iomanip>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -9,11 +12,10 @@
 namespace {
 
 	std::mutex loggerMutex;
-	std::atomic<bool> loggerInitialized{ false };
-	std::atomic<bool> shutdownInProgress{ false };
+	std::atomic<bool> loggerInitialized { false };
+	std::atomic<bool> shutdownInProgress { false };
 
-	spdlog::level::level_enum toSpd(LogLevel level)
-	{
+	spdlog::level::level_enum toSpd(LogLevel level) {
 		switch (level) {
 		case LogLevel::TRACE:
 			return spdlog::level::trace;
@@ -31,8 +33,7 @@ namespace {
 		return spdlog::level::info;
 	}
 
-	LogLevel fromSpd(spdlog::level::level_enum level)
-	{
+	LogLevel fromSpd(spdlog::level::level_enum level) {
 		switch (level) {
 		case spdlog::level::trace:
 			return LogLevel::TRACE;
@@ -51,8 +52,7 @@ namespace {
 		}
 	}
 
-	std::string generateLogFileName(std::string_view basePath)
-	{
+	std::string generateLogFileName(std::string_view basePath) {
 		auto now = std::chrono::system_clock::now();
 		auto time_t = std::chrono::system_clock::to_time_t(now);
 
@@ -77,8 +77,7 @@ namespace {
 		return directory + "/" + baseName + "_" + ss.str() + extension;
 	}
 
-	bool checkDiskSpace(const std::string& path, size_t minSpaceBytes = 50 * 1024 * 1024)
-	{
+	bool checkDiskSpace(const std::string& path, size_t minSpaceBytes = 50 * 1024 * 1024) {
 		try {
 			auto space = std::filesystem::space(std::filesystem::path(path).parent_path());
 			return space.available > minSpaceBytes;
@@ -88,110 +87,106 @@ namespace {
 		}
 	}
 
-	class LogWithSpdLog final : public Logger
-	{
-	public:
-		LogWithSpdLog(std::string_view filePath, size_t rotateSize, size_t rotateFiles)
-		{
-			try {
-				timestampedPath_ = generateLogFileName(filePath);
+	class LogWithSpdLog final : public Logger {
+		public:
+			LogWithSpdLog(std::string_view filePath, size_t rotateSize, size_t rotateFiles) {
+				try {
+					timestampedPath_ = generateLogFileName(filePath);
 
-				if (!checkDiskSpace(timestampedPath_)) {
-					fprintf(stderr, "Warning: Low disk space for logging\n");
+					if (!checkDiskSpace(timestampedPath_)) {
+						fprintf(stderr, "Warning: Low disk space for logging\n");
+					}
+
+					auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+					console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+
+					auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(timestampedPath_, rotateSize, rotateFiles);
+					file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
+
+					file_sink->set_level(spdlog::level::trace);
+
+					std::vector<spdlog::sink_ptr> sinks{ console_sink, file_sink };
+
+					logger_ = std::make_shared<spdlog::logger>("tfs", sinks.begin(), sinks.end());
+
+					logger_->set_level(spdlog::level::trace);
+					logger_->flush_on(spdlog::level::warn);
+
+					spdlog::register_logger(logger_);
+
+					logger_->info("=== TFS Logger Initialized ===");
+					logger_->info("Log file: {}", timestampedPath_);
+					logger_->flush();
+
 				}
-
-				auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-				console_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
-
-				auto file_sink =
-					std::make_shared<spdlog::sinks::rotating_file_sink_mt>(timestampedPath_, rotateSize, rotateFiles);
-				file_sink->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%l] %v");
-
-				file_sink->set_level(spdlog::level::trace);
-
-				std::vector<spdlog::sink_ptr> sinks{ console_sink, file_sink };
-
-				logger_ = std::make_shared<spdlog::logger>("tfs", sinks.begin(), sinks.end());
-
-				logger_->set_level(spdlog::level::trace);
-				logger_->flush_on(spdlog::level::warn);
-
-				spdlog::register_logger(logger_);
-
-				logger_->info("=== TFS Logger Initialized ===");
-				logger_->info("Log file: {}", timestampedPath_);
-				logger_->flush();
-
+				catch (const std::exception& e) {
+					fprintf(stderr, "Error creating logger: %s\n", e.what());
+					throw;
+				}
 			}
-			catch (const std::exception& e) {
-				fprintf(stderr, "Error creating logger: %s\n", e.what());
-				throw;
-			}
-		}
 
-		~LogWithSpdLog() override
-		{
-			try {
-				if (logger_ && !shutdownInProgress.load()) {
-					logger_->info("=== TFS Logger Shutdown ===");
+			~LogWithSpdLog() override {
+				try {
+					if (logger_ && !shutdownInProgress.load()) {
+						logger_->info("=== TFS Logger Shutdown ===");
+						logger_->flush();
+					}
+				}
+				catch (...) {
+					// Safe destructor - no exceptions
+				}
+			}
+
+			void setLevel(LogLevel level) override {
+				if (logger_) {
+					logger_->set_level(toSpd(level));
+				}
+			}
+
+			LogLevel getLevel() const override {
+				return logger_ ? fromSpd(logger_->level()) : LogLevel::INFO;
+			}
+
+			bool isEnabled(LogLevel level) const override {
+				return logger_ && logger_->should_log(toSpd(level));
+			}
+
+			void flush() {
+				if (logger_) {
 					logger_->flush();
 				}
 			}
-			catch (...) {
-				// Safe destructor - no exceptions
-			}
-		}
 
-		void setLevel(LogLevel level) override
-		{
-			if (logger_) {
-				logger_->set_level(toSpd(level));
-			}
-		}
+		protected:
+			void log(LogLevel level, std::string_view msg) override {
+				if (!logger_ || !logger_->should_log(toSpd(level))) return;
 
-		LogLevel getLevel() const override { return logger_ ? fromSpd(logger_->level()) : LogLevel::INFO; }
+				try {
+					if (level >= LogLevel::ERRORR && !checkDiskSpace(timestampedPath_)) {
+						fprintf(stderr, "[DISK FULL] %.*s\n", (int)msg.size(), msg.data());
+					}
 
-		bool isEnabled(LogLevel level) const override { return logger_ && logger_->should_log(toSpd(level)); }
+					logger_->log(toSpd(level), msg);
 
-		void flush()
-		{
-			if (logger_) {
-				logger_->flush();
-			}
-		}
-
-	protected:
-		void log(LogLevel level, std::string_view msg) override
-		{
-			if (!logger_ || !logger_->should_log(toSpd(level))) return;
-
-			try {
-				if (level >= LogLevel::ERRORR && !checkDiskSpace(timestampedPath_)) {
-					fprintf(stderr, "[DISK FULL] %.*s\n", (int)msg.size(), msg.data());
+					if (level >= LogLevel::ERRORR) {
+						logger_->flush();
+					}
 				}
-
-				logger_->log(toSpd(level), msg);
-
-				if (level >= LogLevel::ERRORR) {
-					logger_->flush();
+				catch (const std::exception& e) {
+					fprintf(stderr, "[LOGGER ERROR] %s: %.*s\n", e.what(), (int)msg.size(), msg.data());
 				}
 			}
-			catch (const std::exception& e) {
-				fprintf(stderr, "[LOGGER ERROR] %s: %.*s\n", e.what(), (int)msg.size(), msg.data());
-			}
-		}
 
-	private:
-		std::shared_ptr<spdlog::logger> logger_;
-		std::string timestampedPath_;
+		private:
+			std::shared_ptr<spdlog::logger> logger_;
+			std::string timestampedPath_;
 	};
 
 	static std::unique_ptr<Logger> loggerInstance;
 
 } // namespace
 
-Logger& g_logger()
-{
+Logger& g_logger() {
 	if (loggerInitialized.load(std::memory_order_acquire) && loggerInstance) {
 		return *loggerInstance;
 	}
@@ -203,8 +198,7 @@ Logger& g_logger()
 	return *loggerInstance;
 }
 
-bool initLogger(LogLevel level, std::string_view filePath, size_t rotateSize, size_t rotateFiles)
-{
+bool initLogger(LogLevel level, std::string_view filePath, size_t rotateSize, size_t rotateFiles) {
 	std::lock_guard<std::mutex> lock(loggerMutex);
 
 	if (loggerInitialized.load(std::memory_order_acquire)) {
@@ -221,14 +215,14 @@ bool initLogger(LogLevel level, std::string_view filePath, size_t rotateSize, si
 
 		return true;
 	}
+
 	catch (const std::exception& e) {
 		fprintf(stderr, "Failed to initialize logger: %s\n", e.what());
 		return false;
 	}
 }
 
-void shutdownLogger()
-{
+void shutdownLogger() {
 	std::lock_guard<std::mutex> lock(loggerMutex);
 	if (loggerInitialized.load(std::memory_order_acquire)) {
 		shutdownInProgress.store(true, std::memory_order_release);
@@ -252,10 +246,11 @@ void shutdownLogger()
 	}
 }
 
-bool isLoggerInitialized() { return loggerInitialized.load(std::memory_order_acquire); }
+bool isLoggerInitialized() {
+	return loggerInitialized.load(std::memory_order_acquire);
+}
 
-LogLevel parseLogLevel(std::string_view level)
-{
+LogLevel parseLogLevel(std::string_view level) {
 	if (level == "trace") return LogLevel::TRACE;
 	if (level == "debug") return LogLevel::DEBUG;
 	if (level == "info") return LogLevel::INFO;
@@ -265,8 +260,7 @@ LogLevel parseLogLevel(std::string_view level)
 	return LogLevel::INFO;
 }
 
-void loggerSignalHandler(int signal)
-{
+void loggerSignalHandler(int signal) {
 	const char* signalName = "UNKNOWN";
 	g_logger().info("[{}] ", signal);
 	switch (signal) {
@@ -298,15 +292,14 @@ void loggerSignalHandler(int signal)
 	std::raise(signal);
 }
 
-void setupLoggerSignalHandlers()
-{
+void setupLoggerSignalHandlers() {
 	std::signal(SIGTERM, loggerSignalHandler);
 	std::signal(SIGINT, loggerSignalHandler);
 
-#ifndef _WIN32
-	std::signal(SIGHUP, loggerSignalHandler);
-	std::signal(SIGQUIT, loggerSignalHandler);
-#endif
+	#ifndef _WIN32
+		std::signal(SIGHUP, loggerSignalHandler);
+		std::signal(SIGQUIT, loggerSignalHandler);
+	#endif
 
 	std::signal(SIGSEGV, loggerSignalHandler);
 	std::signal(SIGABRT, loggerSignalHandler);
